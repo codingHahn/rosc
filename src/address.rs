@@ -18,7 +18,7 @@ use std::iter::FromIterator;
 ///
 /// A valid OSC address begins with a `/` and contains at least a method name, e.g. `/tempo`.
 /// A plain address must not include any of the following characters `#*,/?[]{}`, since they're reserved for OSC address patterns.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Hash)]
 pub struct OscAddress(String);
 
 impl OscAddress {
