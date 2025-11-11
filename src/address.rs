@@ -1,5 +1,6 @@
 use crate::errors::OscError;
 
+use alloc::iter::Peekable;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::fmt::{Display, Formatter};
@@ -108,11 +109,9 @@ impl Matcher {
             let result = match part {
                 AddressPatternComponent::Tag(s) => match_literally(remainder, s),
                 AddressPatternComponent::WildcardSingle => match_wildcard_single(remainder),
-                AddressPatternComponent::Wildcard(l) => {
-                    match_wildcard(remainder, *l, iter.peek().copied())
-                }
+                AddressPatternComponent::Wildcard(l) => match_wildcard(remainder, *l, iter.clone()),
                 AddressPatternComponent::CharacterClass(cc) => match_character_class(remainder, cc),
-                AddressPatternComponent::Choice(s) => match_choice(remainder, s),
+                AddressPatternComponent::Choice(s) => match_choice(remainder, s, iter.clone()),
             };
 
             remainder = match result {
@@ -295,12 +294,59 @@ fn match_character_class<'a>(
 /// Sequentially try all tags from choice element until one matches or return an error
 /// Example choice element: '{foo,bar}'
 /// It will get parsed into a vector containing the strings "foo" and "bar", which are then matched
-fn match_choice<'a>(input: &'a str, choices: &[String]) -> IResult<&'a str, &'a str> {
+///
+/// This needs lookahead, because we need to decide if we matched with the correct choice.
+/// Example:
+/// `/{1, 10}/mute`: When choices are substrings of one another, we need to know with which
+/// choice we are supposed to match the input with (because it affects the remainder as the choice
+/// is consumed)
+/// Imagine the following address: `/10/mute`. Both choices match, but the remainder (the part
+/// after the match) looks different.
+/// Match with `1`:  `0/mute` errors out in the next step
+/// Match with `10`: `/mute` successfully matches
+fn match_choice<'a>(
+    input: &'a str,
+    choices: &[String],
+    mut lookahead_iter: Peekable<std::slice::Iter<'_, AddressPatternComponent>>,
+) -> IResult<&'a str, &'a str> {
+    let next_component = lookahead_iter.next();
     for choice in choices {
-        if let Ok((i, o)) = tag::<_, _, nom::error::Error<&str>>(choice.as_str())(input) {
-            return Ok((i, o));
+        if let Ok((remainder, o)) = tag::<_, _, nom::error::Error<&str>>(choice.as_str())(input) {
+            // Lookahead to see if the rest of the string still parses
+            match next_component {
+                Some(component) => {
+                    let result: IResult<_, _, nom::error::Error<&str>> = match component {
+                        AddressPatternComponent::Tag(s) => match_literally(&remainder, s.as_str()),
+                        AddressPatternComponent::CharacterClass(cc) => {
+                            match_character_class(remainder, cc)
+                        }
+                        AddressPatternComponent::Choice(s) => {
+                            match_choice(remainder, s, lookahead_iter.clone())
+                        }
+                        AddressPatternComponent::WildcardSingle => {
+                            match_wildcard_single(remainder)
+                        }
+                        AddressPatternComponent::Wildcard(l) => {
+                            match_wildcard(remainder, *l, lookahead_iter.clone())
+                        }
+                    };
+                    // Is true when the rest of the address string parsed successfully
+                    if result.is_ok() {
+                        return Ok((remainder, o));
+                    }
+                }
+                None => {
+                    // If no further AddressPatternComponents are expected, check that the
+                    // remainder is empty. Otherwise the string has more characters which where not
+                    // expected in the address pattern and thus does not match the address pattern.
+                    if remainder.is_empty() {
+                        return Ok((remainder, o));
+                    }
+                }
+            }
         }
     }
+
     Err(nom::Err::Error(nom::error::Error::from_error_kind(
         input,
         ErrorKind::Tag,
@@ -312,9 +358,10 @@ fn match_choice<'a>(input: &'a str, choices: &[String]) -> IResult<&'a str, &'a 
 fn match_wildcard<'a>(
     input: &'a str,
     minimum_length: usize,
-    next: Option<&AddressPatternComponent>,
+    mut iter: Peekable<std::slice::Iter<'_, AddressPatternComponent>>,
 ) -> IResult<&'a str, &'a str> {
     // If the next component is a '/', there are no more components in the current part and it can be wholly consumed
+    let next = iter.next();
     let next = next.filter(|&part| match part {
         AddressPatternComponent::Tag(s) => s != "/",
         _ => true,
@@ -342,7 +389,7 @@ fn match_wildcard<'a>(
                     AddressPatternComponent::CharacterClass(cc) => {
                         match_character_class(substring, cc)
                     }
-                    AddressPatternComponent::Choice(s) => match_choice(substring, s),
+                    AddressPatternComponent::Choice(s) => match_choice(substring, s, iter.clone()),
                     // These two cases are prevented from happening by map_address_pattern_component
                     AddressPatternComponent::WildcardSingle => {
                         panic!("Single wildcard ('?') must not follow wildcard ('*')")

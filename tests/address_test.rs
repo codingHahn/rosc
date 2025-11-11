@@ -38,6 +38,28 @@ fn test_matcher() {
     assert!(matcher
         .match_address(&OscAddress::new(String::from("/footron")).expect("Valid address pattern")));
 
+    matcher = Matcher::new("/oscillator/{1,10}/frequency").expect("Should be valid");
+    assert!(matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/1/frequency")).expect("Valid address pattern")
+    ));
+    assert!(matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/10/frequency")).expect("Valid address pattern")
+    ));
+
+    matcher = Matcher::new("/oscillator/{1,10}").expect("Should be valid");
+    assert!(matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/1")).expect("Valid address pattern")
+    ));
+    assert!(!matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/12")).expect("Valid address pattern")
+    ));
+    assert!(matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/10")).expect("Valid address pattern")
+    ));
+    assert!(!matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/100")).expect("Valid address pattern")
+    ));
+
     // Character class
     // Character classes are sets or ranges of characters to match.
     // e.g. [a-z] will match any lower case alphabetic character. [abcd] will match the characters abcd.
@@ -199,6 +221,56 @@ fn test_matcher() {
     assert!(!matcher.match_address(
         &OscAddress::new(String::from("/oscillator/something/frequency"))
             .expect("Valid address pattern")
+    ));
+
+    matcher = Matcher::new("/oscillator/*{1,10}/frequency").expect("Should be valid");
+    assert!(matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/foo1/frequency"))
+            .expect("Valid address pattern")
+    ));
+    assert!(matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/foo10/frequency"))
+            .expect("Valid address pattern")
+    ));
+    assert!(matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/1/frequency")).expect("Valid address pattern")
+    ));
+    assert!(matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/10/frequency")).expect("Valid address pattern")
+    ));
+    assert!(!matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/something/frequency"))
+            .expect("Valid address pattern")
+    ));
+
+    matcher = Matcher::new("/oscillator/*{1,10}?/frequency").expect("Should be valid");
+    assert!(matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/foo1a/frequency"))
+            .expect("Valid address pattern")
+    ));
+    assert!(matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/foo10/frequency"))
+            .expect("Valid address pattern")
+    ));
+    assert!(matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/10/frequency")).expect("Valid address pattern")
+    ));
+    assert!(!matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/something/frequency"))
+            .expect("Valid address pattern")
+    ));
+
+    matcher = Matcher::new("/oscillator/*{10,1}?/frequency").expect("Should be valid");
+    assert!(matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/foo1a/frequency"))
+            .expect("Valid address pattern")
+    ));
+    assert!(matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/foo10/frequency"))
+            .expect("Valid address pattern")
+    ));
+    assert!(matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/10/frequency")).expect("Valid address pattern")
     ));
 
     // Wildcard as last part
