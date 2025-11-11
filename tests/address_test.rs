@@ -115,6 +115,21 @@ fn test_matcher() {
         &OscAddress::new(String::from("/oscillator/-")).expect("Valid address pattern")
     ));
 
+    // Trailing dash has no special meaning
+    matcher = Matcher::new("/oscillator/[12345]?").expect("Should be valid");
+    assert!(matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/12")).expect("Valid address pattern")
+    ));
+    assert!(!matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/112")).expect("Valid address pattern")
+    ));
+    assert!(matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/50")).expect("Valid address pattern")
+    ));
+    assert!(!matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/60")).expect("Valid address pattern")
+    ));
+
     // Single wildcard
     // A single wildcard '?' matches exactly one alphanumeric character
     matcher = Matcher::new("/oscillator/?/frequency").expect("Should be valid");

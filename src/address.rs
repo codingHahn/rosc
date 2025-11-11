@@ -284,10 +284,17 @@ fn match_character_class<'a>(
     input: &'a str,
     character_class: &'a CharacterClass,
 ) -> IResult<&'a str, &'a str> {
+    // Character classes in OSC only match one character. nom does not include a method similar to
+    // `is_not` or `is_a` that only checks one character. So we explicitly take one character from the input
+    // using `take_while_m_n` and then use the `is_not` or `is_a` to check for matches.
     if character_class.negated {
-        is_not(character_class.characters.as_str())(input)
+        let (rest, single_char) = take_while_m_n(1, 1, |_| true)(input)?;
+        let (_, matched) = is_not(character_class.characters.as_str())(single_char)?;
+        Ok((rest, matched))
     } else {
-        is_a(character_class.characters.as_str())(input)
+        let (rest, single_char) = take_while_m_n(1, 1, |_| true)(input)?;
+        let (_, matched) = is_a(character_class.characters.as_str())(single_char)?;
+        Ok((rest, matched))
     }
 }
 
