@@ -72,8 +72,9 @@ impl Matcher {
     pub fn new(pattern: &str) -> Result<Self, OscError> {
         verify_address_pattern(pattern)?;
         let mut match_fn = all_consuming(many1(map_address_pattern_component));
-        let (_, pattern_parts) =
-            match_fn(pattern).map_err(|err| OscError::BadAddressPattern(err.to_string()))?;
+        let (_, pattern_parts) = match_fn
+            .parse(pattern)
+            .map_err(|err| OscError::BadAddressPattern(err.to_string()))?;
 
         Ok(Matcher {
             pattern: pattern.into(),
@@ -142,7 +143,8 @@ fn pattern_choice(input: &str) -> IResult<&str, Vec<&str>> {
         char('{'),
         separated_list1(tag(","), take_while1(is_address_character)),
         char('}'),
-    )(input)
+    )
+    .parse(input)
 }
 
 /// Parser to recognize a character class like [!a-zA-Z] and return '!a-zA-Z'
@@ -169,7 +171,7 @@ fn pattern_character_class(input: &str) -> IResult<&str, &str> {
         ))),
     );
 
-    delimited(char('['), recognize(inner), char(']'))(input)
+    delimited(char('['), recognize(inner), char(']')).parse(input)
 }
 
 /// A characters class is defined by a set or range of characters that it matches.
@@ -204,7 +206,7 @@ impl CharacterClass {
     pub fn new(s: &str) -> Self {
         let mut input = s;
         let negated;
-        match char::<_, nom::error::Error<&str>>('!')(input) {
+        match char::<_, nom::error::Error<&str>>('!').parse(input) {
             Ok((i, _)) => {
                 negated = true;
                 input = i;
@@ -226,7 +228,8 @@ impl CharacterClass {
             satisfy(is_address_character).map(|x| x.to_string()),
             // Trailing dash
             char('-').map(|_| String::from("-")),
-        ))))(input);
+        ))))
+        .parse(input);
 
         match characters {
             Ok((_, o)) => CharacterClass {
@@ -270,15 +273,16 @@ fn map_address_pattern_component(input: &str) -> IResult<&str, AddressPatternCom
         }),
         pattern_character_class
             .map(|s: &str| AddressPatternComponent::CharacterClass(CharacterClass::new(s))),
-    ))(input)
+    ))
+    .parse(input)
 }
 
 fn match_literally<'a>(input: &'a str, pattern: &str) -> IResult<&'a str, &'a str> {
-    tag(pattern)(input)
+    tag(pattern).parse(input)
 }
 
 fn match_wildcard_single(input: &str) -> IResult<&str, &str> {
-    take_while_m_n(1, 1, is_address_character)(input)
+    take_while_m_n(1, 1, is_address_character).parse(input)
 }
 
 fn match_character_class<'a>(
@@ -286,9 +290,9 @@ fn match_character_class<'a>(
     character_class: &'a CharacterClass,
 ) -> IResult<&'a str, &'a str> {
     if character_class.negated {
-        is_not(character_class.characters.as_str())(input)
+        is_not(character_class.characters.as_str()).parse(input)
     } else {
-        is_a(character_class.characters.as_str())(input)
+        is_a(character_class.characters.as_str()).parse(input)
     }
 }
 
@@ -297,7 +301,7 @@ fn match_character_class<'a>(
 /// It will get parsed into a vector containing the strings "foo" and "bar", which are then matched
 fn match_choice<'a>(input: &'a str, choices: &[String]) -> IResult<&'a str, &'a str> {
     for choice in choices {
-        if let Ok((i, o)) = tag::<_, _, nom::error::Error<&str>>(choice.as_str())(input) {
+        if let Ok((i, o)) = tag::<_, _, nom::error::Error<&str>>(choice.as_str()).parse(input) {
             return Ok((i, o));
         }
     }
@@ -323,7 +327,8 @@ fn match_wildcard<'a>(
         // No next component, consume all allowed characters until end or next '/'
         None => verify(take_while1(is_address_character), |s: &str| {
             s.len() >= minimum_length
-        })(input),
+        })
+        .parse(input),
         // There is another element in this part, so logic gets a bit more complicated
         Some(component) => {
             // Wildcards can only match within the current address part, discard the rest
@@ -356,7 +361,7 @@ fn match_wildcard<'a>(
                     longest = i
                 }
             }
-            verify(take(longest), |s: &str| s.len() >= minimum_length)(input)
+            verify(take(longest), |s: &str| s.len() >= minimum_length).parse(input)
         }
     }
 }
@@ -373,10 +378,11 @@ fn match_wildcard<'a>(
 /// }
 /// ```
 pub fn verify_address(input: &str) -> Result<(), OscError> {
-    match all_consuming::<_, _, nom::error::Error<&str>, _>(many1(pair(
+    match all_consuming::<_, nom::error::Error<&str>, _>(many1(pair(
         tag("/"),
         take_while1(is_address_character),
-    )))(input)
+    )))
+    .parse(input)
     {
         Ok(_) => Ok(()),
         Err(_) => Err(OscError::BadAddress("Invalid address".to_string())),
@@ -385,13 +391,14 @@ pub fn verify_address(input: &str) -> Result<(), OscError> {
 
 /// Parse an address pattern's part until the next '/' or the end
 fn address_pattern_part_parser(input: &str) -> IResult<&str, Vec<&str>> {
-    many1::<_, _, nom::error::Error<&str>, _>(alt((
+    many1(alt((
         take_while1(is_address_character),
         tag("?"),
         tag("*"),
         recognize(pattern_choice),
         pattern_character_class,
-    )))(input)
+    )))
+    .parse(input)
 }
 
 /// Verify that an address pattern is valid
@@ -409,7 +416,8 @@ pub fn verify_address_pattern(input: &str) -> Result<(), OscError> {
     match all_consuming(many1(
         // Each part must start with a '/'. This automatically also prevents a trailing '/'
         pair(tag("/"), address_pattern_part_parser.map(|x| x.concat())),
-    ))(input)
+    ))
+    .parse(input)
     {
         Ok(_) => Ok(()),
         Err(_) => Err(OscError::BadAddress("Invalid address pattern".to_string())),

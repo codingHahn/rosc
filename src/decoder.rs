@@ -13,7 +13,8 @@ use nom::multi::many0;
 use nom::number::complete::{be_f32, be_f64, be_i32, be_i64, be_u32};
 use nom::sequence::terminated;
 use nom::Offset;
-use nom::{combinator::map_res, sequence::tuple, Err, IResult};
+use nom::Parser;
+use nom::{combinator::map_res, Err, IResult};
 
 /// Common MTU size for ethernet
 pub const MTU: usize = 1536;
@@ -119,10 +120,11 @@ fn decode_bundle<'a>(
     input: &'a [u8],
     original_input: &'a [u8],
 ) -> IResult<&'a [u8], OscPacket, OscError> {
-    let (input, (timetag, content)) = tuple((
+    let (input, (timetag, content)) = (
         read_time_tag,
         many0(|input| read_bundle_element(input, original_input)),
-    ))(input)?;
+    )
+        .parse(input)?;
 
     Ok((input, OscPacket::Bundle(OscBundle { timetag, content })))
 }
@@ -142,7 +144,8 @@ fn read_bundle_element<'a>(
             })
         },
         |input| decode_packet(input, original_input),
-    )(input)
+    )
+    .parse(input)
 }
 
 fn read_osc_string<'a>(
@@ -151,7 +154,7 @@ fn read_osc_string<'a>(
 ) -> IResult<&'a [u8], String, OscError> {
     map_res(
         terminated(
-            tuple((take_till(|c| c == 0u8), tag(b"\0"))),
+            (take_till(|c| c == 0u8), tag(&b"\0"[..])),
             pad_to_32_bit_boundary(original_input),
         ),
         |(str_buf, _null_byte)| {
@@ -159,7 +162,8 @@ fn read_osc_string<'a>(
                 .map_err(OscError::StringError)
                 .map(|s| s.trim_matches(0u8 as char).to_string())
         },
-    )(input)
+    )
+    .parse(input)
 }
 
 fn read_osc_args<'a>(
@@ -205,10 +209,10 @@ fn read_osc_arg<'a>(
     tag: char,
 ) -> IResult<&'a [u8], OscType, OscError> {
     match tag {
-        'f' => map(be_f32, OscType::Float)(input),
-        'd' => map(be_f64, OscType::Double)(input),
-        'i' => map(be_i32, OscType::Int)(input),
-        'h' => map(be_i64, OscType::Long)(input),
+        'f' => map(be_f32, OscType::Float).parse(input),
+        'd' => map(be_f64, OscType::Double).parse(input),
+        'i' => map(be_i32, OscType::Int).parse(input),
+        'h' => map(be_i64, OscType::Long).parse(input),
         's' => read_osc_string(input, original_input)
             .map(|(remainder, string)| (remainder, OscType::String(string))),
         't' => read_time_tag(input).map(|(remainder, time)| (remainder, OscType::Time(time))),
@@ -234,7 +238,8 @@ fn read_char(input: &[u8]) -> IResult<&[u8], OscType, OscError> {
             Some(c) => Ok(OscType::Char(c)),
             None => Err(OscError::BadArg("Argument is not a char!".to_string())),
         }
-    })(input)
+    })
+    .parse(input)
 }
 
 fn read_blob<'a>(
@@ -246,14 +251,16 @@ fn read_blob<'a>(
     map(
         terminated(take(size), pad_to_32_bit_boundary(original_input)),
         |blob| OscType::Blob(blob.into()),
-    )(input)
+    )
+    .parse(input)
 }
 
 fn read_time_tag(input: &[u8]) -> IResult<&[u8], OscTime, OscError> {
-    map(tuple((be_u32, be_u32)), |(seconds, fractional)| OscTime {
+    map((be_u32, be_u32), |(seconds, fractional)| OscTime {
         seconds,
         fractional,
-    })(input)
+    })
+    .parse(input)
 }
 
 fn read_midi_message(input: &[u8]) -> IResult<&[u8], OscType, OscError> {
@@ -264,7 +271,8 @@ fn read_midi_message(input: &[u8]) -> IResult<&[u8], OscType, OscError> {
             data1: buf[2],
             data2: buf[3],
         })
-    })(input)
+    })
+    .parse(input)
 }
 
 fn read_osc_color(input: &[u8]) -> IResult<&[u8], OscType, OscError> {
@@ -275,7 +283,8 @@ fn read_osc_color(input: &[u8]) -> IResult<&[u8], OscType, OscError> {
             blue: buf[2],
             alpha: buf[3],
         })
-    })(input)
+    })
+    .parse(input)
 }
 
 fn pad_to_32_bit_boundary<'a>(
