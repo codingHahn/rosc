@@ -164,7 +164,7 @@ fn pattern_character_class(input: &str) -> IResult<&str, &str> {
                 // separated pair parser above. Will always validate as true.
                 satisfy(is_address_character).map(|c| ('\0', c)),
             )),
-            |(o1, o2): &(char, char)| o1 < o2,
+            |(o1, o2): &(char, char)| o1 <= o2,
         ))),
     );
 

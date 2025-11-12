@@ -115,6 +115,29 @@ fn test_matcher() {
         &OscAddress::new(String::from("/oscillator/-")).expect("Valid address pattern")
     ));
 
+    matcher = Matcher::new("/oscillator/[1-128]").expect("Should be valid");
+    assert!(matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/1")).expect("Valid address pattern")
+    ));
+    assert!(matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/2")).expect("Valid address pattern")
+    ));
+    assert!(matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/8")).expect("Valid address pattern")
+    ));
+    assert!(!matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/11")).expect("Valid address pattern")
+    ));
+    assert!(!matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/12")).expect("Valid address pattern")
+    ));
+    assert!(!matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/28")).expect("Valid address pattern")
+    ));
+    assert!(!matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/128")).expect("Valid address pattern")
+    ));
+
     // Trailing dash has no special meaning
     matcher = Matcher::new("/oscillator/[12345]?").expect("Should be valid");
     assert!(matcher.match_address(
@@ -367,6 +390,9 @@ fn test_verify_address_pattern() {
     verify_address_pattern("/test[a-za-z]").expect("Should be valid");
     verify_address_pattern("/test[a-z]*??/{foo,bar,baz}[!a-z0-9]/*").expect("Should be valid");
     verify_address_pattern("/test{foo}").expect("Should be valid");
+    // Character range starting and ending at same character.
+    // Is equivalent to /[a], but no reason to forbid
+    verify_address_pattern("/[a-a]").expect("Should be valid");
 
     // Empty element in choice
     verify_address_pattern("/{asd,}/").expect_err("Should not be valid");
@@ -374,8 +400,6 @@ fn test_verify_address_pattern() {
     verify_address_pattern("/[a-b*]/").expect_err("Should not be valid");
     // Character range is reversed
     verify_address_pattern("/[b-a]").expect_err("Should not be valid");
-    // Character range starting and ending at same character
-    verify_address_pattern("/[a-a]").expect_err("Should not be valid");
 
     // Empty
     verify_address_pattern("").expect_err("Should not be valid");
