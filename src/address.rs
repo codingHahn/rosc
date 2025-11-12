@@ -5,7 +5,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::fmt::{Display, Formatter};
 use nom::branch::alt;
-use nom::bytes::complete::{is_a, is_not, tag, take, take_while1, take_while_m_n};
+use nom::bytes::complete::{is_a, is_not, tag, take, take_while, take_while1, take_while_m_n};
 use nom::character::complete::{char, satisfy};
 use nom::combinator::{all_consuming, complete, opt, recognize, verify};
 use nom::error::{ErrorKind, ParseError};
@@ -375,7 +375,7 @@ fn match_wildcard<'a>(
     });
     match next {
         // No next component, consume all allowed characters until end or next '/'
-        None => verify(take_while1(is_address_character), |s: &str| {
+        None => verify(take_while(is_address_character), |s: &str| {
             s.len() >= minimum_length
         })(input),
         // There is another element in this part, so logic gets a bit more complicated
