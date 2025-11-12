@@ -187,6 +187,20 @@ fn test_matcher() {
             .expect("Valid address pattern")
     ));
 
+    matcher = Matcher::new("/oscillator/[12345]*").expect("Should be valid");
+    assert!(matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/12")).expect("Valid address pattern")
+    ));
+    assert!(matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/2")).expect("Valid address pattern")
+    ));
+    assert!(!matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/6")).expect("Valid address pattern")
+    ));
+    assert!(!matcher.match_address(
+        &OscAddress::new(String::from("/oscillator/60")).expect("Valid address pattern")
+    ));
+
     // Mix with choice
     matcher = Matcher::new("/oscillator/*{bar,baz}/frequency").expect("Should be valid");
     assert!(matcher.match_address(
